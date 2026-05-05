@@ -1,230 +1,213 @@
-package main
+package tests
 
 import (
 	"encoding/json"
-	"final_project/pkg/utils"
-	"fmt"
-	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"final_project/pkg/handlers"
+	"final_project/pkg/utils"
 )
 
-func GetProjectDir() (string, error) {
-	_, filename, _, ok := runtime.Caller(0)
+func TestGetCurrentTime(t *testing.T) {
+	currentTime := utils.GetCurrentTime()
 
-	if !ok {
-		return "", fmt.Errorf("не удалось получить информацию о вызывающем файле")
+	if currentTime == "" {
+		t.Error("GetCurrentTime() вернула пустую строку")
 	}
 
-	dir := filepath.Dir(filename)
-	projectDir := filepath.Dir(filepath.Dir(dir))
-	return projectDir, nil
+	if len(currentTime) != 19 {
+		t.Errorf("Неверная длина формата времени: ожидалось 19, получено %d", len(currentTime))
+	}
 
+	if !strings.Contains(currentTime, "-") || !strings.Contains(currentTime, ":") {
+		t.Error("Неверный формат времени: отсутствуют разделители")
+	}
+}
+
+func TestGetCurrentTimeNotEmpty(t *testing.T) {
+	time1 := utils.GetCurrentTime()
+	time.Sleep(1 * time.Second)
+	time2 := utils.GetCurrentTime()
+
+	if time1 == time2 {
+		t.Error("Время должно различаться между вызовами")
+	}
 }
 
 func TestHomeHandler(t *testing.T) {
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
 
-	req, err := http.NewRequest("GET", "/", nil)
+	handlers.HomeHandler(w, req)
 
-	if err != nil {
-		t.Fatalf("Could not create request: %v", err)
+	if w.Result().StatusCode != http.StatusOK {
+		t.Errorf("Ожидался статус 200, получен %d", w.Result().StatusCode)
 	}
+}
 
-	rr := httptest.NewRecorder()
-	homeHandler(rr, req)
+func TestHomeHandlerNotFound(t *testing.T) {
+	req := httptest.NewRequest("GET", "/nonexistent", nil)
+	w := httptest.NewRecorder()
 
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusOK)
+	handlers.HomeHandler(w, req)
+
+	if w.Result().StatusCode != http.StatusNotFound {
+		t.Errorf("Ожидался статус 404, получен %d", w.Result().StatusCode)
 	}
-
-	expected := "Hello, this is the homepage!"
-
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("Handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
-	}
-
 }
 
 func TestTimeHandler(t *testing.T) {
-	req, err := http.NewRequest("GET", "/time", nil)
+	req := httptest.NewRequest("GET", "/time", nil)
+	w := httptest.NewRecorder()
 
-	if err != nil {
-		t.Fatalf("Could not create request: %v", err)
+	handlers.TimeHandler(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Ожидался статус 200, получен %d", resp.StatusCode)
 	}
-
-	rr := httptest.NewRecorder()
-	timeHandler(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusOK)
-	}
-
-	expected := "Current time:"
-
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("Handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
-	}
-
 }
 
 func TestIndexHandler(t *testing.T) {
-	req, err := http.NewRequest("GET", "/index?name=TestUser", nil)
-
-	if err != nil {
-		t.Fatalf("Could not create request: %v", err)
-	}
-	rr := httptest.NewRecorder()
-	indexHandler(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusOK)
-	}
-
-	expected := "Hello, TestUser!"
-
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("Handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
-	}
-
-	req, err = http.NewRequest("GET", "/index", nil)
-
-	if err != nil {
-		t.Fatalf("Could not create request: %v", err)
-	}
-
-	rr = httptest.NewRecorder()
-	indexHandler(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusOK)
+	tests := []struct {
+		name           string
+		url            string
+		expectedStatus int
+	}{
+		{
+			name:           "С параметром name",
+			url:            "/index?name=Тест",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "Без параметра",
+			url:            "/index",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "С пустым параметром",
+			url:            "/index?name=",
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:           "С именем admin",
+			url:            "/index?name=admin",
+			expectedStatus: http.StatusOK,
+		},
 	}
 
-	expected = "Hello, Guest!"
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", tt.url, nil)
+			w := httptest.NewRecorder()
 
-	if !strings.Contains(rr.Body.String(), expected) {
-		t.Errorf("Handler returned unexpected body: got %v want %v", rr.Body.String(), expected)
-	}
+			handlers.IndexHandler(w, req)
 
-}
-
-func TestApiDataHandler(t *testing.T) {
-	req, err := http.NewRequest("GET", "/api/data", nil)
-	if err != nil {
-		t.Fatalf("Could not create request: %v", err)
-	}
-
-	rr := httptest.NewRecorder()
-	apiDataHandler(rr, req)
-
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("Handler returned wrong status code: got %v want %v", status, http.StatusOK)
-	}
-
-	contentType := rr.Header().Get("Content-Type")
-
-	if contentType != "application/json" {
-		t.Errorf("Handler returned unexpected Content-Type: got %v want %v", contentType, "application/json")
-	}
-
-	var data map[string]string
-	err = json.NewDecoder(rr.Body).Decode(&data)
-
-	if err != nil {
-		t.Fatalf("Could not decode response body: %v", err)
-	}
-
-	expectedMessage := "This is JSON data from the API"
-
-	if data["message"] != expectedMessage {
-		t.Errorf("Handler returned unexpected message: got %v want %v", data["message"], expectedMessage)
+			if w.Result().StatusCode != tt.expectedStatus {
+				t.Errorf("Ожидался статус %d, получен %d",
+					tt.expectedStatus, w.Result().StatusCode)
+			}
+		})
 	}
 }
 
-func TestGetCurrentTime(t *testing.T) {
+func TestAPIHandler(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/data", nil)
+	w := httptest.NewRecorder()
 
-	currentTime := utils.GetCurrentTime()
-	if currentTime == "" {
-		t.Errorf("GetCurrentTime returned an empty string")
+	handlers.APIDataHandler(w, req)
+
+	resp := w.Result()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Ожидался статус 200, получен %d", resp.StatusCode)
 	}
-	fmt.Println("Current Time:", currentTime)
 
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		t.Errorf("Ожидался Content-Type application/json, получен %s", contentType)
+	}
 }
 
-func TestLogRequest(t *testing.T) {
+func TestAPIResponseStructure(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/data", nil)
+	w := httptest.NewRecorder()
 
-	req, err := http.NewRequest("GET", "/test", nil)
+	handlers.APIDataHandler(w, req)
+
+	var response map[string]interface{}
+	err := json.NewDecoder(w.Body).Decode(&response)
+
 	if err != nil {
-		t.Fatalf("Could not create request: %v", err)
+		t.Errorf("Ошибка парсинга JSON: %v", err)
 	}
 
-	logChan := make(chan logData, 1)
-	oldLogChan := logChan
-
-	logMutex.Lock()
-	logChan = make(chan logData, 1)
-	logMutex.Unlock()
-
-	logRequest(req)
-
-	logEntry := <-logChan
-
-	logMutex.Lock()
-	logChan = oldLogChan
-	logMutex.Unlock()
-
-	if logEntry.url != "/test" {
-		t.Errorf("logRequest logged incorrect URL: got %v, want %v", logEntry.url, "/test")
+	if _, exists := response["data"]; !exists {
+		t.Error("Поле 'data' отсутствует в JSON ответе")
 	}
 
-	if logEntry.method != "GET" {
-		t.Errorf("logRequest logged incorrect method: got %v, want %v", logEntry.method, "GET")
+	if _, exists := response["meta"]; !exists {
+		t.Error("Поле 'meta' отсутствует в JSON ответе")
 	}
 
-	if logEntry.ip == "" {
-		t.Errorf("logRequest logged empty IP address")
+	if data, ok := response["data"].(map[string]interface{}); ok {
+		requiredFields := []string{"message", "timestamp", "status", "server", "version"}
+		for _, field := range requiredFields {
+			if _, exists := data[field]; !exists {
+				t.Errorf("Поле '%s' отсутствует в data ответе", field)
+			}
+		}
 	}
-
-	close(logChan)
-
 }
 
-func TestLogProcessor(t *testing.T) {
+func TestContentType(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/data", nil)
+	w := httptest.NewRecorder()
 
-	tempFile, err := os.CreateTemp("", "testlog")
-	if err != nil {
-		t.Fatalf("Could not create temp file: %v", err)
+	handlers.APIDataHandler(w, req)
+
+	if contentType := w.Header().Get("Content-Type"); contentType == "" {
+		t.Error("Заголовок Content-Type отсутствует")
 	}
 
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
-
-	logChan := make(chan logData, 1)
-	logChan <- logData{
-		url:    "/test",
-		method: "GET",
-		ip:     "127.0.0.1",
+	if contentType := w.Header().Get("Content-Type"); !strings.Contains(contentType, "application/json") {
+		t.Errorf("Неверный Content-Type: %s", contentType)
 	}
-	close(logChan)
-	logMutex.Lock()
-	oldOutput := log.Writer()
-	log.SetOutput(tempFile)
+}
 
-	defer log.SetOutput(oldOutput)
+func TestCORSHeaders(t *testing.T) {
+	req := httptest.NewRequest("GET", "/api/data", nil)
+	w := httptest.NewRecorder()
 
-	go logProcessor()
-	logMutex.Unlock()
+	handlers.APIDataHandler(w, req)
 
-	close(logChan)
+	if cors := w.Header().Get("Access-Control-Allow-Origin"); cors != "*" {
+		t.Errorf("Ожидался заголовок CORS *, получен %s", cors)
+	}
+}
 
-	content, err := io.ReadFile(tempFile.Name())
+func BenchmarkGetCurrentTime(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		utils.GetCurrentTime()
+	}
+}
 
-	if err != nil {
-		t.Fatalf("Could not read temp file: %v", err)
+func BenchmarkHomeHandler(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		handlers.HomeHandler(w, req)
+	}
+}
+
+func BenchmarkAPIDataHandler(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		req := httptest.NewRequest("GET", "/api/data", nil)
+		w := httptest.NewRecorder()
+		handlers.APIDataHandler(w, req)
 	}
 }

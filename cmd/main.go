@@ -1,173 +1,68 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"runtime"
-	"sync"
+	"time"
 
-	"final_project/pkg/utils"
-
-	"github.com/joho/godotenv"
+	"final_project/pkg/handlers"
 )
 
-type Data struct {
-	Message string `json:"message"`
+var logger *log.Logger
+
+func init() {
+	file, err := os.OpenFile("server.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("Ошибка открытия файла логов:", err)
+	}
+	logger = log.New(file, "SERVER: ", log.Ldate|log.Ltime|log.Lshortfile)
 }
 
-type logData struct {
-	url    string
-	method string
-	ip     string
+func loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		logger.Printf("Метод: %s, Путь: %s, IP: %s, User-Agent: %s",
+			r.Method, r.URL.Path, r.RemoteAddr, r.UserAgent())
+		next(w, r)
+		logger.Printf("Запрос обработан за %v", time.Since(start))
+	}
 }
-
-var (
-	logMutex sync.Mutex
-	logChan  chan logData
-)
 
 func main() {
-	err := godotenv.Load()
+	http.HandleFunc("/", loggingMiddleware(handlers.HomeHandler))
+	http.HandleFunc("/time", loggingMiddleware(handlers.TimeHandler))
+	http.HandleFunc("/index", loggingMiddleware(handlers.IndexHandler))
+	http.HandleFunc("/api", loggingMiddleware(handlers.APIPageHandler))
+	http.HandleFunc("/api/data", loggingMiddleware(handlers.APIDataHandler))
 
-	if err != nil {
-		log.Printf("Error loading .env file: %v\n", err)
+	fileServer := http.FileServer(http.Dir("static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fileServer))
+
+	startMsg := `
+╔══════════════════════════════════════════════════════╗
+║          СЕРВЕР УСПЕШНО ЗАПУЩЕН                     ║
+╠══════════════════════════════════════════════════════╣
+║  Порт: :8080                                        ║
+║  Адрес: http://localhost:8080                       ║
+╠══════════════════════════════════════════════════════╣
+║  Маршруты:                                          ║
+║  • /           - Главная страница                   ║
+║  • /time       - Текущее время                      ║
+║  • /index      - Приветствие                        ║
+║  • /api        - Страница API                       ║
+║  • /api/data   - JSON API                           ║
+╚══════════════════════════════════════════════════════╝
+`
+
+	fmt.Println(startMsg)
+
+	logger.Println("Сервер запущен на порту 8080")
+
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatalf("Ошибка запуска сервера: %v", err)
+		log.Fatal("Ошибка запуска сервера:", err)
 	}
 
-	logChan = make(chan logData, 100)
-
-	go logProcessor()
-
-	http.HandleFunc("/", homeHandler)
-	http.HandleFunc("/time", timeHandler)
-	http.HandleFunc("/index", indexHandler)
-	http.HandleFunc("/api/data", apiDataHandler)
-	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fs))
-	port := os.Getenv("PORT")
-
-	if port == "" {
-		port = "8080"
-		log.Printf("Defaulting to port %s\n", port)
-	}
-	log.Printf("Starting server on port %s\n", port)
-	err = http.ListenAndServe(":"+port, nil)
-
-	if err != nil {
-		log.Fatal("ListenAndServe error: ", err)
-	}
-
-}
-
-func homeHandler(w http.ResponseWriter, r *http.Request) {
-	logRequest(r)
-	tmpl, err := template.ParseFiles("templates/home.html")
-
-	if err != nil {
-		http.Error(w, "Error loading template", http.StatusInternalServerError)
-		log.Println("Error loading template:", err)
-		return
-	}
-
-	data := map[string]string{"Message": "Hello, this is the homepage!"}
-	err = tmpl.Execute(w, data)
-
-	if err != nil {
-		http.Error(w, "Error executing template", http.StatusInternalServerError)
-		log.Println("Error executing template:", err)
-	}
-
-}
-
-func timeHandler(w http.ResponseWriter, r *http.Request) {
-
-	logRequest(r)
-
-	currentTime := utils.GetCurrentTime()
-
-	fmt.Fprintf(w, "Current time: %s", currentTime)
-
-}
-
-func indexHandler(w http.ResponseWriter, r *http.Request) {
-	logRequest(r)
-	name := r.URL.Query().Get("name")
-
-	if name == "" {
-		name = "Guest"
-	}
-
-	tmpl, err := template.ParseFiles("templates/index.html")
-
-	if err != nil {
-		http.Error(w, "Error loading template", http.StatusInternalServerError)
-		return
-	}
-
-	data := map[string]string{"Name": name}
-	err = tmpl.Execute(w, data)
-
-	if err != nil {
-		http.Error(w, "Error executing template", http.StatusInternalServerError)
-	}
-}
-
-func apiDataHandler(w http.ResponseWriter, r *http.Request) {
-	logRequest(r)
-	data := Data{Message: "This is JSON data from the API"}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
-
-}
-
-func logRequest(r *http.Request) {
-	ip := r.RemoteAddr
-
-	logChan <- logData{
-		url:    r.URL.Path,
-		method: r.Method,
-		ip:     ip,
-	}
-}
-
-func logProcessor() {
-	logFile, err := os.OpenFile("request.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-
-	defer logFile.Close()
-
-	for logEntry := range logChan {
-		logMutex.Lock()
-		logMessage := fmt.Sprintf("URL: %s, Method: %s, IP: %s, Goroutines: %d\n", logEntry.url, logEntry.method, logEntry.ip, runtime.NumGoroutine())
-		_, err := logFile.WriteString(logMessage)
-
-		if err != nil {
-
-			log.Printf("Failed to write to log file: %v", err)
-
-		}
-		logMutex.Unlock()
-		log.Println(logMessage)
-
-	}
-
-}
-
-func GetProjectDir() (string, error) {
-	_, filename, _, ok := runtime.Caller(0)
-
-	if !ok {
-		return "", fmt.Errorf("не удалось получить информацию о вызывающем файле")
-	}
-
-	dir := filepath.Dir(filename)
-	projectDir := filepath.Dir(dir)
-	return projectDir, nil
 }

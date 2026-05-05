@@ -1,61 +1,51 @@
-# Final Project
+# 🚀 Итоговый проект по дисциплине "Программирование на Go"
 
-This is a final project for demonstrating Go web development skills.
+Веб-сервер на Go, демонстрирующий навыки работы с HTTP, шаблонами, пакетами, параллельным программированием, тестированием и отладкой.
 
-## Features
+## 📋 Описание проекта
 
-*   Serves a homepage with a welcome message.
+Данный проект представляет собой полноценный веб-сервер, реализованный на языке Go. Сервер обрабатывает различные маршруты, использует HTML-шаблоны, статические файлы (CSS, JavaScript), goroutines для параллельной обработки запросов, а также включает систему логирования и unit-тестирования.
 
-*   Provides the current server time.
+### Основные возможности:
+- 🌐 Обработка HTTP-запросов на порту 8080
+- 📄 Работа с HTML-шаблонами
+- ⚡ Параллельная обработка с использованием goroutines
+- 📊 JSON API endpoint
+- 📝 Логирование всех запросов
+- 🧪 Unit-тесты и бенчмарки
+- 🎨 Адаптивный веб-дизайн
+- 🔧 Модульная архитектура проекта
 
-*   Greets users by name from a URL parameter.
+## 🛠 Технологический стек
 
-*   Returns JSON data from an API endpoint.
+- **Go** 1.21+
+- **net/http** - стандартный HTTP-сервер
+- **html/template** - шаблонизатор
+- **encoding/json** - работа с JSON
+- **goroutines & channels** - параллельное программирование
+- **testing** - unit-тестирование
+- **HTML5, CSS3, JavaScript** - frontend
 
-*   Logs requests using goroutines.
+## 📦 Требования
 
-## Instructions
+- Go версии 1.21 или выше
+- Современный веб-браузер
+- Git (опционально)
 
-1.  Clone the repository.
+## 🚀 Быстрый старт
 
-2.  Run `go mod init final_project` to initialize the Go module.
+### Установка и запуск
 
-3.  Run `go run ./cmd/main.go` to start the server.
+```bash
+# 1. Клонируйте репозиторий
+git clone https://github.com/Codename-Nik/final_project.git
+cd final_project
 
-4.  Access the application in your browser:
+# 2. Инициализируйте Go модуль (если требуется)
+go mod init final_project
 
-    *   Homepage: `http://localhost:8080/`
+# 3. Установите зависимости (если есть внешние)
+go mod tidy
 
-    *   Time: `http://localhost:8080/time`
-
-    *   Index: `http://localhost:8080/index?name=YourName`
-
-    *   API: `http://localhost:8080/api/data`
-
-## Testing
-
-To run the tests, use the following command:
-
-bash
-
-go test ./…
-
-## Logging
-
-Request logs are written to the `request.log` file.
-
-Дополнительные замечания и улучшения:
-
-Обработка ошибок:  В коде добавлена более детальная обработка ошибок и логирование.
-
-Конфигурация:  Использование переменных окружения для порта, что делает приложение более гибким.  Можно добавить и другие параметры конфигурации через переменные окружения.
-
-Логирование: Добавлен mutex для защиты от race conditions при параллельной записи в файл логов.
-
-Обработка статики:  Добавлен обработчик для статических файлов, таких как CSS и JS.
-
-.env file: Добавлена поддержка .env file, для загрузки переменных окружения.
-
-GetProjectDir: Добавлена функция для получения абсолютного пути до корневой директории проекта.
-
-Этот код предоставляет базовую структуру и функциональность для вашего проекта.  Вы можете расширить его, добавляя новые функции, улучшая обработку ошибок и реализуя более сложные шаблоны.
+# 4. Запустите сервер
+go run cmd/main.go

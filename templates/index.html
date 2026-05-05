@@ -1,11 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Index</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <title>Приветствие</title>
 </head>
+
 <body>
-    <h1>Hello, {{.Name}}</h1>
+    <div class="container">
+        <h1>Привет, {{ .Name }}!</h1>
+        <p class="greeting-message">Рады видеть вас на нашем сайте.</p>
+        {{ if .IsAdmin }}
+        <div class="admin-panel">
+            <p>Панель администратора</p>
+        </div>
+        {{ end }}
+
+        <nav>
+            <ul>
+                <li><a href="/">Главная</a></li>
+                <li><a href="/time">Текущее время</a> </li>
+                <li><a href="/index?name=Гость">Приветствие</a></li>
+                <li><a href="/api/data">API данные</a></li>
+            </ul>
+        </nav>
+    </div>
+
+    <script src="/static/js/script.js"></script>
 </body>
+
 </html>
